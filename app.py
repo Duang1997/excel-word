@@ -2,22 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 import io
-import dataframe_image as dfi
-from PIL import Image
-import pytesseract
-from streamlit_paste_button import paste_image_button
-import matplotlib.font_manager as fm
-import matplotlib.pyplot as plt
-
-# ==========================================
-# 0. ตั้งค่าฟอนต์ภาษาไทยสำหรับการส่งออกภาพ (ต้องมีไฟล์ THSarabunNew.ttf)
-# ==========================================
-try:
-    font_path = "THSarabunNew.ttf"
-    fm.fontManager.addfont(font_path)
-    plt.rcParams['font.family'] = fm.FontProperties(fname=font_path).get_name()
-except Exception:
-    pass # หากไม่มีไฟล์ฟอนต์ ระบบจะทำงานต่อได้แต่อาจแสดงผลภาษาไทยผิดพลาด
 
 # ==========================================
 # 1. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
@@ -47,10 +31,9 @@ def format_thai_bank(bank_abbr):
     return bank_mapping.get(str(bank_abbr).upper(), str(bank_abbr))
 
 # ==========================================
-# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง (มาตรฐานการสืบสวน)
+# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง
 # ==========================================
 def clean_date_to_ce(date_val):
-    """แปลงวันที่เป็น ค.ศ. (dd/mm/yyyy)"""
     if not isinstance(date_val, str):
         date_val = str(date_val)
     match = re.search(r'(\d{2}/\d{2}/)(\d{4})', date_val)
@@ -63,7 +46,6 @@ def clean_date_to_ce(date_val):
     return date_val
 
 def standardize_bank_name(bank_name):
-    """แปลงชื่อธนาคารเป็นตัวย่อภาษาอังกฤษ"""
     bank_mapping = {
         "ธนาคารกสิกรไทย": "KBANK", "กสิกรไทย": "KBANK",
         "ธนาคารไทยพาณิชย์": "SCB", "ไทยพาณิชย์": "SCB",
@@ -73,13 +55,25 @@ def standardize_bank_name(bank_name):
     }
     return bank_mapping.get(str(bank_name), str(bank_name))
 
-def style_statement_table(df):
-    """กำหนดรูปแบบตารางให้คล้าย Excel (มีเส้นขอบ, จัดกึ่งกลาง)"""
-    styles = [
-        dict(selector="th", props=[("border", "1px solid black"), ("text-align", "center"), ("background-color", "#ffffff")]),
-        dict(selector="td", props=[("border", "1px solid black"), ("text-align", "center")])
-    ]
-    return df.style.set_table_styles(styles).hide(axis="index")
+def get_main_account(df):
+    all_accounts = pd.concat([df['หมายเลขบัญชีต้นทาง'], df['หมายเลขบัญชีปลายทาง']])
+    all_accounts = all_accounts[all_accounts.astype(str).str.strip() != '']
+    if not all_accounts.empty:
+        return all_accounts.mode()[0]
+    return None
+
+def color_in_out_excel(row, main_account):
+    color = ''
+    src_acc = str(row.get('หมายเลขบัญชีต้นทาง', '')).strip()
+    dst_acc = str(row.get('หมายเลขบัญชีปลายทาง', '')).strip()
+    
+    if main_account:
+        if dst_acc == main_account:
+            color = 'color: #008000;' 
+        elif src_acc == main_account:
+            color = 'color: #FF0000;' 
+            
+    return [color if col == 'ยอดเงิน' else '' for col in row.index]
 
 # ==========================================
 # 3. ฟังก์ชันประมวลผลข้อมูลหลัก
@@ -100,10 +94,10 @@ def process_statement_data(raw_text):
                 "ประเภทรายการ": parts[2],
                 "ช่องทาง": parts[3],
                 "ชื่อธนาคารต้นทาง": standardize_bank_name(parts[4]),
-                "หมายเลขบัญชีต้นทาง": str(parts[5]), # บังคับเป็น String
+                "หมายเลขบัญชีต้นทาง": str(parts[5]), 
                 "ชื่อบัญชีต้นทาง": parts[6],
                 "ชื่อธนาคารปลายทาง": standardize_bank_name(parts[7]),
-                "หมายเลขบัญชีปลายทาง": str(parts[8]), # บังคับเป็น String
+                "หมายเลขบัญชีปลายทาง": str(parts[8]), 
                 "ชื่อบัญชีปลายทาง": parts[9],
                 "ยอดเงิน": parts[10],
                 "คงเหลือ": parts[11] if len(parts) >= 12 else "-"
@@ -146,7 +140,7 @@ default_template = "เมื่อวันที่ {date} เวลาปร�
 user_template = st.text_area("ตัวแปรที่รองรับ: {date}, {time}, {type}, {channel}, {src_bank}, {src_acc}, {src_name}, {dst_bank}, {dst_acc}, {dst_name}, {amount}, {balance}", value=default_template)
 
 st.subheader("📥 นำเข้าข้อมูล")
-tab1, tab2, tab3 = st.tabs(["1. วางข้อความ", "2. อัปโหลด/ลากไฟล์ Excel", "3. วางภาพจาก Clipboard"])
+tab1, tab2 = st.tabs(["1. วางข้อความ", "2. อัปโหลด/ลากไฟล์ Excel"])
 
 df_result = pd.DataFrame()
 
@@ -165,31 +159,16 @@ with tab2:
         else:
             st.warning("กรุณาอัปโหลดไฟล์ Excel ก่อนดำเนินการ")
 
-with tab3:
-    st.info("คัดลอกรูปภาพ (Ctrl+C) จากนั้นคลิกที่ปุ่มด้านล่างเพื่อดึงภาพจากคลิปบอร์ด")
-    paste_result = paste_image_button(
-        label="📋 คลิกเพื่อวางภาพจาก Clipboard",
-        text_color="#ffffff",
-        background_color="#28a745",
-        hover_background_color="#218838"
-    )
-    
-    if paste_result.image_data is not None:
-        image = paste_result.image_data
-        st.image(image, caption="ภาพที่นำเข้า", use_column_width=True)
-        
-        if st.button("ประมวลผลจากภาพ (OCR)"):
-            try:
-                extracted_text = pytesseract.image_to_string(image, lang='tha+eng')
-                df_result = process_statement_data(extracted_text)
-            except Exception as e:
-                st.error("เกิดข้อผิดพลาดในการอ่านภาพ โปรดตรวจสอบการติดตั้ง Tesseract-OCR")
-
 # ==========================================
 # 5. ส่วนแสดงผลและส่งออก
 # ==========================================
 if not df_result.empty:
     st.success("ประมวลผลสำเร็จ")
+    
+    main_account = get_main_account(df_result)
+    if main_account:
+        st.info(f"🔍 ระบบตรวจพบบัญชีหลักในการทำธุรกรรม: {main_account}")
+    
     st.divider()
     
     st.subheader("📝 ข้อความสำหรับรายงานสืบสวน (Word)")
@@ -221,32 +200,17 @@ if not df_result.empty:
     st.divider()
     
     st.subheader("📊 ข้อมูลตาราง")
-    st.dataframe(df_result)
+    st.dataframe(df_result.style.apply(lambda row: color_in_out_excel(row, main_account), axis=1))
     
-    col1, col2 = st.columns(2)
+    excel_buffer = io.BytesIO()
+    styled_excel_df = df_result.style.apply(lambda row: color_in_out_excel(row, main_account), axis=1)
     
-    with col1:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_result.to_excel(writer, index=False, sheet_name='Statement')
-        
-        st.download_button(
-            label="📥 ดาวน์โหลดไฟล์ Excel",
-            data=excel_buffer.getvalue(),
-            file_name="Statement_Processed.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        styled_excel_df.to_excel(writer, index=False, sheet_name='Statement')
     
-    with col2:
-        image_buffer = io.BytesIO()
-        try:
-            styled_df = style_statement_table(df_result)
-            dfi.export(styled_df, image_buffer, table_conversion="matplotlib")
-            st.download_button(
-                label="🖼️ ดาวน์โหลดรูปภาพตาราง",
-                data=image_buffer.getvalue(),
-                file_name="Statement_Table.png",
-                mime="image/png"
-            )
-        except Exception as e:
-            st.warning(f"ไม่สามารถส่งออกภาพได้: {e} โปรดตรวจสอบไฟล์ฟอนต์หรือไลบรารี")
+    st.download_button(
+        label="📥 ดาวน์โหลดไฟล์ Excel",
+        data=excel_buffer.getvalue(),
+        file_name="Statement_Processed.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
