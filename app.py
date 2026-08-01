@@ -6,8 +6,11 @@ import dataframe_image as dfi
 from PIL import Image
 import pytesseract
 
+# หากทดสอบบน Windows ส่วนตัว ให้ลบเครื่องหมาย # ด้านหน้าบรรทัดด้านล่าง และระบุที่อยู่ไฟล์ tesseract.exe
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 # ==========================================
-# ฟังก์ชันจัดการข้อมูล
+# 1. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
 # ==========================================
 def format_thai_date(date_str):
     thai_months = [
@@ -33,6 +36,9 @@ def format_thai_bank(bank_abbr):
     }
     return bank_mapping.get(str(bank_abbr).upper(), str(bank_abbr))
 
+# ==========================================
+# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง (มาตรฐานการสืบสวน)
+# ==========================================
 def clean_date_to_ce(date_val):
     if not isinstance(date_val, str):
         date_val = str(date_val)
@@ -55,6 +61,9 @@ def standardize_bank_name(bank_name):
     }
     return bank_mapping.get(str(bank_name), str(bank_name))
 
+# ==========================================
+# 3. ฟังก์ชันประมวลผลข้อมูลหลัก
+# ==========================================
 def process_statement_data(raw_text):
     records = []
     lines = raw_text.strip().split('\n')
@@ -71,10 +80,10 @@ def process_statement_data(raw_text):
                 "ประเภทรายการ": parts[2],
                 "ช่องทาง": parts[3],
                 "ชื่อธนาคารต้นทาง": standardize_bank_name(parts[4]),
-                "หมายเลขบัญชีต้นทาง": str(parts[5]), 
+                "หมายเลขบัญชีต้นทาง": str(parts[5]), # บังคับให้เป็น String เพื่อรักษาศูนย์นำหน้า
                 "ชื่อบัญชีต้นทาง": parts[6],
                 "ชื่อธนาคารปลายทาง": standardize_bank_name(parts[7]),
-                "หมายเลขบัญชีปลายทาง": str(parts[8]),
+                "หมายเลขบัญชีปลายทาง": str(parts[8]), # บังคับให้เป็น String เพื่อรักษาศูนย์นำหน้า
                 "ชื่อบัญชีปลายทาง": parts[9],
                 "ยอดเงิน": parts[10],
                 "คงเหลือ": parts[11] if len(parts) >= 12 else "-"
@@ -84,8 +93,7 @@ def process_statement_data(raw_text):
 
 def process_excel_upload(df_raw):
     records = []
-    # บังคับแปลงข้อมูลทุกคอลัมน์เป็นข้อความเพื่อรักษาความสมบูรณ์ของหมายเลขบัญชี
-    df_raw = df_raw.astype(str)
+    df_raw = df_raw.astype(str) # แปลงทั้ง DataFrame เป็น String เพื่อความปลอดภัย
     
     for _, row in df_raw.iterrows():
         cols = row.tolist()
@@ -108,7 +116,7 @@ def process_excel_upload(df_raw):
     return pd.DataFrame(records)
 
 # ==========================================
-# ส่วนติดต่อผู้ใช้งาน (UI)
+# 4. ส่วนติดต่อผู้ใช้งาน (UI)
 # ==========================================
 st.set_page_config(page_title="ระบบวิเคราะห์รายการเดินบัญชี", layout="wide")
 st.title("ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี")
@@ -142,6 +150,7 @@ with tab3:
     if uploaded_image is not None:
         image = Image.open(uploaded_image)
         st.image(image, caption="ภาพที่นำเข้า", use_column_width=True)
+    
     if st.button("ประมวลผลจากภาพ (OCR)"):
         if uploaded_image is not None:
             try:
@@ -150,12 +159,12 @@ with tab3:
                 st.text(extracted_text)
                 df_result = process_statement_data(extracted_text)
             except Exception as e:
-                st.error("เกิดข้อผิดพลาดในการอ่านภาพ โปรดตรวจสอบการติดตั้ง Tesseract-OCR")
+                st.error("เกิดข้อผิดพลาดในการอ่านภาพ โปรดตรวจสอบการติดตั้ง Tesseract-OCR หรือไฟล์ packages.txt บน Streamlit Cloud")
         else:
             st.warning("กรุณาวางภาพหรืออัปโหลดไฟล์ภาพก่อนดำเนินการ")
 
 # ==========================================
-# ส่วนแสดงผลและส่งออก
+# 5. ส่วนแสดงผลและส่งออก
 # ==========================================
 if not df_result.empty:
     st.success("ประมวลผลสำเร็จ")
