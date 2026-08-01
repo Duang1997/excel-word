@@ -6,6 +6,18 @@ import dataframe_image as dfi
 from PIL import Image
 import pytesseract
 from streamlit_paste_button import paste_image_button
+import matplotlib.font_manager as fm
+import matplotlib.pyplot as plt
+
+# ==========================================
+# 0. ตั้งค่าฟอนต์ภาษาไทยสำหรับการส่งออกภาพ (ต้องมีไฟล์ THSarabunNew.ttf)
+# ==========================================
+try:
+    font_path = "THSarabunNew.ttf"
+    fm.fontManager.addfont(font_path)
+    plt.rcParams['font.family'] = fm.FontProperties(fname=font_path).get_name()
+except Exception:
+    pass # หากไม่มีไฟล์ฟอนต์ ระบบจะทำงานต่อได้แต่อาจแสดงผลภาษาไทยผิดพลาด
 
 # ==========================================
 # 1. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
@@ -35,9 +47,10 @@ def format_thai_bank(bank_abbr):
     return bank_mapping.get(str(bank_abbr).upper(), str(bank_abbr))
 
 # ==========================================
-# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง
+# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง (มาตรฐานการสืบสวน)
 # ==========================================
 def clean_date_to_ce(date_val):
+    """แปลงวันที่เป็น ค.ศ. (dd/mm/yyyy)"""
     if not isinstance(date_val, str):
         date_val = str(date_val)
     match = re.search(r'(\d{2}/\d{2}/)(\d{4})', date_val)
@@ -50,6 +63,7 @@ def clean_date_to_ce(date_val):
     return date_val
 
 def standardize_bank_name(bank_name):
+    """แปลงชื่อธนาคารเป็นตัวย่อภาษาอังกฤษ"""
     bank_mapping = {
         "ธนาคารกสิกรไทย": "KBANK", "กสิกรไทย": "KBANK",
         "ธนาคารไทยพาณิชย์": "SCB", "ไทยพาณิชย์": "SCB",
@@ -58,6 +72,14 @@ def standardize_bank_name(bank_name):
         "ธนาคารออมสิน": "GSB", "ออมสิน": "GSB"
     }
     return bank_mapping.get(str(bank_name), str(bank_name))
+
+def style_statement_table(df):
+    """กำหนดรูปแบบตารางให้คล้าย Excel (มีเส้นขอบ, จัดกึ่งกลาง)"""
+    styles = [
+        dict(selector="th", props=[("border", "1px solid black"), ("text-align", "center"), ("background-color", "#ffffff")]),
+        dict(selector="td", props=[("border", "1px solid black"), ("text-align", "center")])
+    ]
+    return df.style.set_table_styles(styles).hide(axis="index")
 
 # ==========================================
 # 3. ฟังก์ชันประมวลผลข้อมูลหลัก
@@ -78,10 +100,10 @@ def process_statement_data(raw_text):
                 "ประเภทรายการ": parts[2],
                 "ช่องทาง": parts[3],
                 "ชื่อธนาคารต้นทาง": standardize_bank_name(parts[4]),
-                "หมายเลขบัญชีต้นทาง": str(parts[5]),
+                "หมายเลขบัญชีต้นทาง": str(parts[5]), # บังคับเป็น String
                 "ชื่อบัญชีต้นทาง": parts[6],
                 "ชื่อธนาคารปลายทาง": standardize_bank_name(parts[7]),
-                "หมายเลขบัญชีปลายทาง": str(parts[8]),
+                "หมายเลขบัญชีปลายทาง": str(parts[8]), # บังคับเป็น String
                 "ชื่อบัญชีปลายทาง": parts[9],
                 "ยอดเงิน": parts[10],
                 "คงเหลือ": parts[11] if len(parts) >= 12 else "-"
@@ -144,7 +166,7 @@ with tab2:
             st.warning("กรุณาอัปโหลดไฟล์ Excel ก่อนดำเนินการ")
 
 with tab3:
-    st.info("คัดลอกรูปภาพ (Ctrl+C) จากนั้นคลิกที่ปุ่มด้านล่างเพื่อดึงภาพจากระบบ")
+    st.info("คัดลอกรูปภาพ (Ctrl+C) จากนั้นคลิกที่ปุ่มด้านล่างเพื่อดึงภาพจากคลิปบอร์ด")
     paste_result = paste_image_button(
         label="📋 คลิกเพื่อวางภาพจาก Clipboard",
         text_color="#ffffff",
@@ -159,8 +181,6 @@ with tab3:
         if st.button("ประมวลผลจากภาพ (OCR)"):
             try:
                 extracted_text = pytesseract.image_to_string(image, lang='tha+eng')
-                st.info("ข้อความที่สกัดได้จากภาพ (ตรวจสอบความถูกต้องก่อนใช้งาน):")
-                st.text(extracted_text)
                 df_result = process_statement_data(extracted_text)
             except Exception as e:
                 st.error("เกิดข้อผิดพลาดในการอ่านภาพ โปรดตรวจสอบการติดตั้ง Tesseract-OCR")
@@ -200,7 +220,7 @@ if not df_result.empty:
     
     st.divider()
     
-    st.subheader("📊 ข้อมูลตาราง (หัวตารางต้นฉบับ)")
+    st.subheader("📊 ข้อมูลตาราง")
     st.dataframe(df_result)
     
     col1, col2 = st.columns(2)
@@ -220,12 +240,13 @@ if not df_result.empty:
     with col2:
         image_buffer = io.BytesIO()
         try:
-            dfi.export(df_result, image_buffer, table_conversion="matplotlib")
+            styled_df = style_statement_table(df_result)
+            dfi.export(styled_df, image_buffer, table_conversion="matplotlib")
             st.download_button(
                 label="🖼️ ดาวน์โหลดรูปภาพตาราง",
                 data=image_buffer.getvalue(),
                 file_name="Statement_Table.png",
                 mime="image/png"
             )
-        except Exception:
-            st.warning("เซิร์ฟเวอร์ไม่รองรับการส่งออกภาพตาราง โปรดใช้เครื่องมือจับภาพหน้าจอแทน")
+        except Exception as e:
+            st.warning(f"ไม่สามารถส่งออกภาพได้: {e} โปรดตรวจสอบไฟล์ฟอนต์หรือไลบรารี")
