@@ -5,3 +5,4 @@ dataframe_image
 Pillow
 pytesseract
 streamlit-paste-button
+matplotlib
