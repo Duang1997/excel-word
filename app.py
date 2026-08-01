@@ -6,7 +6,7 @@ import io
 # ==========================================
 # 1. การตั้งค่าหน้าเว็บและรูปแบบ (UI & CSS)
 # ==========================================
-st.set_page_config(page_title="ระบบวิเคราะห์รายการเดินบัญชี", layout="wide")
+st.set_page_config(page_title="ระบบแปลงเส้นเงินเป็น Text ลงรายงานสืบสวน", layout="wide")
 
 # URL สำหรับโลโก้และลายน้ำ
 LOGO_URL = "https://cib.go.th/backend/uploads/medium_logo_cib_2_2x_1be93f4a36_dc4193cba8.png"
