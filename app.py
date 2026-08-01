@@ -4,7 +4,69 @@ import re
 import io
 
 # ==========================================
-# 1. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
+# 1. การตั้งค่าหน้าเว็บและรูปแบบ (UI & CSS)
+# ==========================================
+st.set_page_config(page_title="ระบบวิเคราะห์รายการเดินบัญชี", layout="wide")
+
+# URL สำหรับโลโก้และลายน้ำ
+LOGO_URL = "https://cib.go.th/backend/uploads/medium_logo_cib_2_2x_1be93f4a36_dc4193cba8.png"
+WATERMARK_URL = "https://cib.go.th/backend/uploads/Untitled_2_copy_f71bdec67d.jpg"
+
+custom_css = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: 'Kanit', sans-serif !important;
+    color: #FFFFFF !important;
+}}
+
+h1, h2, h3, h4, h5, h6 {{
+    color: #F1C40F !important; 
+}}
+
+.stButton>button {{
+    background-color: #F1C40F;
+    color: #0B1E36;
+    font-weight: bold;
+    border-radius: 5px;
+    border: none;
+}}
+
+.stButton>button:hover {{
+    background-color: #D4AC0D;
+    color: #FFFFFF;
+}}
+
+.stTextArea textarea, .stFileUploader {{
+    background-color: #152C4A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #F1C40F !important;
+}}
+
+.stApp {{
+    background-image: url("{WATERMARK_URL}"); 
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}}
+
+.block-container {{
+    background-color: rgba(11, 30, 54, 0.90); 
+    padding: 2rem;
+    border-radius: 10px;
+}}
+</style>
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
+
+# แสดงโลโก้
+st.image(LOGO_URL, width=250)
+st.title("ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี")
+
+# ==========================================
+# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
 # ==========================================
 def format_thai_date(date_str):
     thai_months = [
@@ -31,7 +93,7 @@ def format_thai_bank(bank_abbr):
     return bank_mapping.get(str(bank_abbr).upper(), str(bank_abbr))
 
 # ==========================================
-# 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง
+# 3. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับฐานข้อมูล/ตาราง
 # ==========================================
 def clean_date_to_ce(date_val):
     if not isinstance(date_val, str):
@@ -76,7 +138,7 @@ def color_in_out_excel(row, main_account):
     return [color if col == 'ยอดเงิน' else '' for col in row.index]
 
 # ==========================================
-# 3. ฟังก์ชันประมวลผลข้อมูลหลัก
+# 4. ฟังก์ชันประมวลผลข้อมูลหลัก
 # ==========================================
 def process_statement_data(raw_text):
     records = []
@@ -130,11 +192,8 @@ def process_excel_upload(df_raw):
     return pd.DataFrame(records)
 
 # ==========================================
-# 4. ส่วนติดต่อผู้ใช้งาน (UI)
+# 5. ส่วนติดต่อผู้ใช้งาน (UI Elements)
 # ==========================================
-st.set_page_config(page_title="ระบบวิเคราะห์รายการเดินบัญชี", layout="wide")
-st.title("ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี")
-
 st.subheader("⚙️ กำหนดรูปแบบข้อความ (Template)")
 default_template = "เมื่อวันที่ {date} เวลาประมาณ {time} น. บัญชีธนาคาร{src_bank} หมายเลขบัญชี {src_acc} ชื่อบัญชี {src_name} ได้ทำการโอนเงินไปยัง บัญชีธนาคาร{dst_bank} หมายเลขบัญชี {dst_acc} ชื่อบัญชี {dst_name} จำนวน {amount} บาท"
 user_template = st.text_area("ตัวแปรที่รองรับ: {date}, {time}, {type}, {channel}, {src_bank}, {src_acc}, {src_name}, {dst_bank}, {dst_acc}, {dst_name}, {amount}, {balance}", value=default_template)
@@ -160,7 +219,7 @@ with tab2:
             st.warning("กรุณาอัปโหลดไฟล์ Excel ก่อนดำเนินการ")
 
 # ==========================================
-# 5. ส่วนแสดงผลและส่งออก
+# 6. ส่วนแสดงผลและส่งออก
 # ==========================================
 if not df_result.empty:
     st.success("ประมวลผลสำเร็จ")
