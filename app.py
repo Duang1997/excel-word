@@ -3,6 +3,8 @@ import pandas as pd
 import re
 import io
 import dataframe_image as dfi
+from PIL import Image
+import pytesseract
 
 # ==========================================
 # ฟังก์ชันจัดการข้อมูล
@@ -13,27 +15,37 @@ def format_thai_date(date_str):
         "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
     ]
     try:
-        day, month, year = date_str.split('/')
-        thai_year = int(year) + 543
-        return f"{int(day)} {thai_months[int(month)]} {thai_year}"
+        if isinstance(date_str, str) and '/' in date_str:
+            day, month, year = date_str.split('/')
+            thai_year = int(year) + 543
+            return f"{int(day)} {thai_months[int(month)]} {thai_year}"
+        return str(date_str)
     except:
-        return date_str
+        return str(date_str)
 
 def format_thai_bank(bank_abbr):
     bank_mapping = {
-        "KTB": "ธนาคารกรุงไทย",
-        "KBANK": "ธนาคารกสิกรไทย",
-        "SCB": "ธนาคารไทยพาณิชย์",
-        "BBL": "ธนาคารกรุงเทพ",
-        "GSB": "ธนาคารออมสิน"
+        "KTB": "กรุงไทย",
+        "KBANK": "กสิกรไทย",
+        "SCB": "ไทยพาณิชย์",
+        "BBL": "กรุงเทพ",
+        "GSB": "ออมสิน"
     }
-    return bank_mapping.get(bank_abbr, bank_abbr)
+    return bank_mapping.get(str(bank_abbr).upper(), str(bank_abbr))
 
-def process_statement_data(raw_text):
-    records = []
-    lines = raw_text.strip().split('\n')
-    
-    # แปลงชื่อธนาคารให้เป็นตัวย่อมาตรฐานสำหรับฐานข้อมูล
+def clean_date_to_ce(date_val):
+    if not isinstance(date_val, str):
+        date_val = str(date_val)
+    match = re.search(r'(\d{2}/\d{2}/)(\d{4})', date_val)
+    if match:
+        day_month = match.group(1)
+        year = int(match.group(2))
+        if year > 2400: 
+            year -= 543
+        return f"{day_month}{year}"
+    return date_val
+
+def standardize_bank_name(bank_name):
     bank_mapping = {
         "ธนาคารกสิกรไทย": "KBANK", "กสิกรไทย": "KBANK",
         "ธนาคารไทยพาณิชย์": "SCB", "ไทยพาณิชย์": "SCB",
@@ -41,44 +53,59 @@ def process_statement_data(raw_text):
         "ธนาคารกรุงไทย": "KTB", "กรุงไทย": "KTB",
         "ธนาคารออมสิน": "GSB", "ออมสิน": "GSB"
     }
+    return bank_mapping.get(str(bank_name), str(bank_name))
+
+def process_statement_data(raw_text):
+    records = []
+    lines = raw_text.strip().split('\n')
     
     for line in lines:
         if not line.strip(): 
             continue
             
-        for th_name, en_abbr in bank_mapping.items():
-            line = line.replace(th_name, en_abbr)
-            
-        # จัดการปีให้อยู่ในรูปแบบ ค.ศ. (ป้องการการลบซ้ำซ้อนหากเป็น ค.ศ. อยู่แล้ว)
-        def convert_to_ce(match):
-            day_month = match.group(1)
-            year = int(match.group(2))
-            if year > 2400: # หากเป็น พ.ศ. ให้แปลงเป็น ค.ศ.
-                year -= 543
-            return f"{day_month}{year}"
-        
-        line = re.sub(r'(\d{2}/\d{2}/)(\d{4})', convert_to_ce, line)
         parts = re.split(r'\t|\s{2,}', line.strip())
-        
         if len(parts) >= 11:
             record = {
-                "วันที่ทำรายการ": parts[0],
+                "วันที่ทำรายการ": clean_date_to_ce(parts[0]),
                 "เวลาที่ทำรายการ": parts[1],
                 "ประเภทรายการ": parts[2],
                 "ช่องทาง": parts[3],
-                "ชื่อธนาคารต้นทาง": parts[4],
+                "ชื่อธนาคารต้นทาง": standardize_bank_name(parts[4]),
                 "หมายเลขบัญชีต้นทาง": str(parts[5]), 
                 "ชื่อบัญชีต้นทาง": parts[6],
-                "ชื่อธนาคารปลายทาง": parts[7],
+                "ชื่อธนาคารปลายทาง": standardize_bank_name(parts[7]),
                 "หมายเลขบัญชีปลายทาง": str(parts[8]),
                 "ชื่อบัญชีปลายทาง": parts[9],
                 "ยอดเงิน": parts[10],
                 "คงเหลือ": parts[11] if len(parts) >= 12 else "-"
             }
             records.append(record)
-            
-    df = pd.DataFrame(records)
-    return df
+    return pd.DataFrame(records)
+
+def process_excel_upload(df_raw):
+    records = []
+    # บังคับแปลงข้อมูลทุกคอลัมน์เป็นข้อความเพื่อรักษาความสมบูรณ์ของหมายเลขบัญชี
+    df_raw = df_raw.astype(str)
+    
+    for _, row in df_raw.iterrows():
+        cols = row.tolist()
+        if len(cols) >= 11:
+            record = {
+                "วันที่ทำรายการ": clean_date_to_ce(cols[0]),
+                "เวลาที่ทำรายการ": cols[1],
+                "ประเภทรายการ": cols[2],
+                "ช่องทาง": cols[3],
+                "ชื่อธนาคารต้นทาง": standardize_bank_name(cols[4]),
+                "หมายเลขบัญชีต้นทาง": str(cols[5]).replace('.0', ''), 
+                "ชื่อบัญชีต้นทาง": cols[6],
+                "ชื่อธนาคารปลายทาง": standardize_bank_name(cols[7]),
+                "หมายเลขบัญชีปลายทาง": str(cols[8]).replace('.0', ''),
+                "ชื่อบัญชีปลายทาง": cols[9],
+                "ยอดเงิน": cols[10],
+                "คงเหลือ": cols[11] if len(cols) >= 12 else "-"
+            }
+            records.append(record)
+    return pd.DataFrame(records)
 
 # ==========================================
 # ส่วนติดต่อผู้ใช้งาน (UI)
@@ -87,82 +114,107 @@ st.set_page_config(page_title="ระบบวิเคราะห์ราย�
 st.title("ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี")
 
 st.subheader("⚙️ กำหนดรูปแบบข้อความ (Template)")
-default_template = "วันที่ {date} เวลา {time} มีการทำรายการ {type} จาก{src_bank} บัญชี {src_acc} ({src_name}) ไปยัง{dst_bank} บัญชี {dst_acc} ({dst_name}) ยอดเงิน {amount} บาท"
+default_template = "เมื่อวันที่ {date} เวลาประมาณ {time} น. บัญชีธนาคาร{src_bank} หมายเลขบัญชี {src_acc} ชื่อบัญชี {src_name} ได้ทำการโอนเงินไปยัง บัญชีธนาคาร{dst_bank} หมายเลขบัญชี {dst_acc} ชื่อบัญชี {dst_name} จำนวน {amount} บาท"
 user_template = st.text_area("ตัวแปรที่รองรับ: {date}, {time}, {type}, {channel}, {src_bank}, {src_acc}, {src_name}, {dst_bank}, {dst_acc}, {dst_name}, {amount}, {balance}", value=default_template)
 
 st.subheader("📥 นำเข้าข้อมูล")
-raw_text = st.text_area("วางข้อมูลรายการเดินบัญชีลงในช่องนี้", height=200)
+tab1, tab2, tab3 = st.tabs(["1. วางข้อความ", "2. อัปโหลด/ลากไฟล์ Excel", "3. วางภาพจาก Clipboard"])
 
-if st.button("ประมวลผลข้อมูล"):
-    if raw_text:
-        df = process_statement_data(raw_text)
-        
-        if not df.empty:
-            st.success("ประมวลผลสำเร็จ")
-            st.divider()
-            
-            # 1. การสร้างข้อความ Word Template
-            st.subheader("📝 ข้อความสำหรับรายงานสืบสวน (Word)")
-            generated_text = ""
-            for _, row in df.iterrows():
-                try:
-                    row_text = user_template.format(
-                        date=format_thai_date(row['วันที่ทำรายการ']),
-                        time=row['เวลาที่ทำรายการ'],
-                        type=row['ประเภทรายการ'],
-                        channel=row['ช่องทาง'],
-                        src_bank=format_thai_bank(row['ชื่อธนาคารต้นทาง']),
-                        src_acc=row['หมายเลขบัญชีต้นทาง'],
-                        src_name=row['ชื่อบัญชีต้นทาง'],
-                        dst_bank=format_thai_bank(row['ชื่อธนาคารปลายทาง']),
-                        dst_acc=row['หมายเลขบัญชีปลายทาง'],
-                        dst_name=row['ชื่อบัญชีปลายทาง'],
-                        amount=row['ยอดเงิน'],
-                        balance=row['คงเหลือ']
-                    )
-                    generated_text += row_text + "\n"
-                except Exception as e:
-                    st.error(f"รูปแบบ Template ไม่ถูกต้อง: {e}")
-                    break
-            
-            if generated_text:
-                st.text_area("คัดลอกข้อความด้านล่าง:", value=generated_text, height=200)
-            
-            st.divider()
-            
-            # 2. ตารางข้อมูล Excel
-            st.subheader("📊 ข้อมูลตาราง (หัวตารางต้นฉบับ)")
-            st.dataframe(df)
-            
-            col1, col2 = st.columns(2)
-            
-            # ส่งออกไฟล์ Excel
-            with col1:
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Statement')
-                
-                st.download_button(
-                    label="📥 ดาวน์โหลดไฟล์ Excel",
-                    data=excel_buffer.getvalue(),
-                    file_name="Statement_Processed.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            
-            # ส่งออกรูปภาพ
-            with col2:
-                image_buffer = io.BytesIO()
-                try:
-                    dfi.export(df, image_buffer, table_conversion="matplotlib")
-                    st.download_button(
-                        label="🖼️ ดาวน์โหลดรูปภาพตาราง",
-                        data=image_buffer.getvalue(),
-                        file_name="Statement_Table.png",
-                        mime="image/png"
-                    )
-                except Exception:
-                    st.warning("เซิร์ฟเวอร์ไม่รองรับการส่งออกภาพตาราง โปรดใช้เครื่องมือจับภาพหน้าจอแทน")
+df_result = pd.DataFrame()
+
+with tab1:
+    raw_text = st.text_area("วางข้อมูลรายการเดินบัญชี (ข้อความ/ตาราง) ลงในช่องนี้", height=200)
+    if st.button("ประมวลผลจากข้อความ"):
+        if raw_text:
+            df_result = process_statement_data(raw_text)
+
+with tab2:
+    uploaded_excel = st.file_uploader("ลากไฟล์ Excel (.xlsx, .xls) มาวางที่นี่", type=['xlsx', 'xls'])
+    if st.button("ประมวลผลจาก Excel"):
+        if uploaded_excel is not None:
+            df_raw = pd.read_excel(uploaded_excel, dtype=str)
+            df_result = process_excel_upload(df_raw)
         else:
-            st.error("ไม่สามารถสกัดข้อมูลได้ โปรดตรวจสอบความถูกต้องของข้อมูลต้นฉบับ")
-    else:
-        st.warning("กรุณาวางข้อมูลก่อนดำเนินการ")
+            st.warning("กรุณาอัปโหลดไฟล์ Excel ก่อนดำเนินการ")
+
+with tab3:
+    uploaded_image = st.file_uploader("กดที่ช่องนี้และกด Ctrl+V เพื่อวางภาพจาก Clipboard หรืออัปโหลดไฟล์ภาพ", type=['png', 'jpg', 'jpeg'])
+    if uploaded_image is not None:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="ภาพที่นำเข้า", use_column_width=True)
+    if st.button("ประมวลผลจากภาพ (OCR)"):
+        if uploaded_image is not None:
+            try:
+                extracted_text = pytesseract.image_to_string(image, lang='tha+eng')
+                st.info("ข้อความที่สกัดได้จากภาพ (อาจต้องตรวจสอบความถูกต้อง):")
+                st.text(extracted_text)
+                df_result = process_statement_data(extracted_text)
+            except Exception as e:
+                st.error("เกิดข้อผิดพลาดในการอ่านภาพ โปรดตรวจสอบการติดตั้ง Tesseract-OCR")
+        else:
+            st.warning("กรุณาวางภาพหรืออัปโหลดไฟล์ภาพก่อนดำเนินการ")
+
+# ==========================================
+# ส่วนแสดงผลและส่งออก
+# ==========================================
+if not df_result.empty:
+    st.success("ประมวลผลสำเร็จ")
+    st.divider()
+    
+    st.subheader("📝 ข้อความสำหรับรายงานสืบสวน (Word)")
+    generated_text = ""
+    for _, row in df_result.iterrows():
+        try:
+            row_text = user_template.format(
+                date=format_thai_date(row['วันที่ทำรายการ']),
+                time=row['เวลาที่ทำรายการ'],
+                type=row['ประเภทรายการ'],
+                channel=row['ช่องทาง'],
+                src_bank=format_thai_bank(row['ชื่อธนาคารต้นทาง']),
+                src_acc=row['หมายเลขบัญชีต้นทาง'],
+                src_name=row['ชื่อบัญชีต้นทาง'],
+                dst_bank=format_thai_bank(row['ชื่อธนาคารปลายทาง']),
+                dst_acc=row['หมายเลขบัญชีปลายทาง'],
+                dst_name=row['ชื่อบัญชีปลายทาง'],
+                amount=row['ยอดเงิน'],
+                balance=row['คงเหลือ']
+            )
+            generated_text += row_text + "\n"
+        except Exception as e:
+            st.error(f"รูปแบบ Template ไม่ถูกต้อง: {e}")
+            break
+    
+    if generated_text:
+        st.text_area("คัดลอกข้อความด้านล่าง:", value=generated_text, height=200)
+    
+    st.divider()
+    
+    st.subheader("📊 ข้อมูลตาราง (หัวตารางต้นฉบับ)")
+    st.dataframe(df_result)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df_result.to_excel(writer, index=False, sheet_name='Statement')
+        
+        st.download_button(
+            label="📥 ดาวน์โหลดไฟล์ Excel",
+            data=excel_buffer.getvalue(),
+            file_name="Statement_Processed.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    with col2:
+        image_buffer = io.BytesIO()
+        try:
+            dfi.export(df_result, image_buffer, table_conversion="matplotlib")
+            st.download_button(
+                label="🖼️ ดาวน์โหลดรูปภาพตาราง",
+                data=image_buffer.getvalue(),
+                file_name="Statement_Table.png",
+                mime="image/png"
+            )
+        except Exception:
+            st.warning("เซิร์ฟเวอร์ไม่รองรับการส่งออกภาพตาราง โปรดใช้เครื่องมือจับภาพหน้าจอแทน")
