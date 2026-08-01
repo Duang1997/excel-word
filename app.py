@@ -71,7 +71,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 st.markdown(f"""
 <div style="text-align: center;">
     <img src="{LOGO_URL}" width="200" style="margin-bottom: 20px;">
-    <h1 style="color: #F1C40F; margin-top: 0;">ระบบ แปลงเส้นเงินเป็นข้อความลงรายงานสืบสวน</h1>
+    <h1 style="color: #F1C40F; margin-top: 0;">ระบบ แปลงเส้นเงินเป็นข้อความลงรายงานสืบสวน BY CSD 3</h1>
 </div>
 """, unsafe_allow_html=True)
 st.write("") 
