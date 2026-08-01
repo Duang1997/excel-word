@@ -10,7 +10,7 @@ st.set_page_config(page_title="ระบบวิเคราะห์ราย�
 
 # URL สำหรับโลโก้และลายน้ำ
 LOGO_URL = "https://cib.go.th/backend/uploads/medium_logo_cib_2_2x_1be93f4a36_dc4193cba8.png"
-WATERMARK_URL = "https://cib.go.th/backend/uploads/Untitled_2_copy_f71bdec67d.jpg"
+WATERMARK_URL = "https://www.cib.go.th/uploads/1200x630_56a69e481a.png"
 
 custom_css = f"""
 <style>
@@ -44,10 +44,11 @@ h1, h2, h3, h4, h5, h6 {{
     border: 1px solid #F1C40F !important;
 }}
 
+/* ตั้งค่าลายน้ำให้พอดีจอ (Cover) และยึดติดกับพื้นหลัง (Fixed) */
 .stApp {{
     background-image: url("{WATERMARK_URL}"); 
     background-size: cover;
-    background-position: center;
+    background-position: center center;
     background-repeat: no-repeat;
     background-attachment: fixed;
 }}
@@ -61,9 +62,14 @@ h1, h2, h3, h4, h5, h6 {{
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# แสดงโลโก้
-st.image(LOGO_URL, width=250)
-st.title("ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี")
+# แสดงโลโก้และชื่อระบบให้อยู่กึ่งกลางหน้าจอ
+st.markdown(f"""
+<div style="text-align: center;">
+    <img src="{LOGO_URL}" width="200" style="margin-bottom: 20px;">
+    <h1 style="color: #F1C40F; margin-top: 0;">ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี</h1>
+</div>
+""", unsafe_allow_html=True)
+st.write("") # เว้นบรรทัด
 
 # ==========================================
 # 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
