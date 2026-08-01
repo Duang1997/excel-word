@@ -21,6 +21,11 @@ html, body, [class*="css"] {{
     color: #FFFFFF !important;
 }}
 
+/* กำหนดให้ตัวอักษรป้ายกำกับ (เช่น ตัวแปรที่รองรับ) เป็นสีขาว */
+label, p, span {{
+    color: #FFFFFF !important;
+}}
+
 h1, h2, h3, h4, h5, h6 {{
     color: #F1C40F !important; 
 }}
@@ -38,13 +43,13 @@ h1, h2, h3, h4, h5, h6 {{
     color: #FFFFFF;
 }}
 
+/* เปลี่ยนสีพื้นหลังช่องกรอกข้อมูลเป็นสีเทา */
 .stTextArea textarea, .stFileUploader {{
-    background-color: #152C4A !important;
+    background-color: #555555 !important; 
     color: #FFFFFF !important;
     border: 1px solid #F1C40F !important;
 }}
 
-/* ตั้งค่าลายน้ำให้พอดีจอ (Cover) และยึดติดกับพื้นหลัง (Fixed) */
 .stApp {{
     background-image: url("{WATERMARK_URL}"); 
     background-size: cover;
@@ -69,7 +74,7 @@ st.markdown(f"""
     <h1 style="color: #F1C40F; margin-top: 0;">ระบบวิเคราะห์และสกัดข้อมูลรายการเดินบัญชี</h1>
 </div>
 """, unsafe_allow_html=True)
-st.write("") # เว้นบรรทัด
+st.write("") 
 
 # ==========================================
 # 2. ฟังก์ชันจัดรูปแบบข้อมูลสำหรับแสดงผลบน Word
